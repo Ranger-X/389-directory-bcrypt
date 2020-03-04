@@ -1,6 +1,9 @@
 bcrypt OpenLDAP support
 ----------------------
-pw-bcrypt.c provides support for bcrypt password hashes in OpenLDAP.
+pw-bcrypt.c provides support for bcrypt password hashes in OpenLDAP, as well as
+bcrypt password hashes also hashed before with SHA256 (as does Rocket.Chat in 2020).
+
+The original repository for this is [wclarie/openldap-bcrypt], I just added the sha256 part.
 
 About bcrypt
 ------------
@@ -87,6 +90,12 @@ If you want all your new hashes to use bcrypt (in Password Modify Extended
 Operations), set this in your slapd.conf:
 
 password-hash   {BCRYPT}
+(or use password-hash {SHA256-BCRYPT})
+
+When using cn=config, the option becomes `olcPasswordHash: {BCRYPT}`. You need
+to set this in the **olcDatabase={-1}frontend,cn=config**, as cn=config
+parameters are evaluated before dynamic module loading!
+
 
 However, make sure that all LDAP servers in your environment have the module
 loaded before you do this, otherwise your users will not be able to authenticate.

@@ -39,7 +39,7 @@ moduledir = $(libexecdir)$(ldap_subdir)
 
 all:		$(PROGRAMS)
 
-pw-bcrypt.la:  pw-bcrypt.lo crypt_blowfish.lo
+pw-bcrypt.la:  pw-bcrypt.lo crypt_blowfish.lo crypt_sha256.lo
 	$(LIBTOOL) --mode=link $(CC) $(OPT) -version-info $(LTVER) \
 	-rpath $(moduledir) -module -o $@ $? $(LIBS)
 

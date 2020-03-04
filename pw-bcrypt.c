@@ -30,6 +30,7 @@
 #include "lutil.h"
 
 #include "crypt_blowfish.h"
+#include "crypt_sha256.h"
 
 #ifdef SLAPD_BCRYPT_DEBUG
 #include <stdio.h>
@@ -58,6 +59,8 @@
 
 static int bcrypt_workfactor;
 struct berval bcryptscheme = BER_BVC("{BCRYPT}");
+struct berval sha256bcryptscheme = BER_BVC("{SHA256-BCRYPT}");
+
 
 static int hash_bcrypt(
     const struct berval  *scheme, /* Scheme name to construct output */
@@ -168,6 +171,57 @@ static int chk_bcrypt(
     return LUTIL_PASSWD_ERR;
 }
 
+static const struct berval to_sha256(const struct berval *passwd)
+{
+    _DEBUG("Entering to_sha256\n");
+
+    struct berval sha256_hexpasswd;
+
+    BYTE buf[SHA256_BLOCK_SIZE];
+	SHA256_CTX ctx;
+
+	sha256_init(&ctx);
+	sha256_update(&ctx, (const unsigned char *) passwd->bv_val, passwd->bv_len);
+	sha256_final(&ctx, buf);
+
+    char* hexdigest = (char *) ber_memalloc(SHA256_BLOCK_SIZE*2+1);
+    for (int i=0; i<SHA256_BLOCK_SIZE; i++) {
+        sprintf(hexdigest + 2*i, "%02x", (unsigned int) buf[i]);
+    }
+    hexdigest[SHA256_BLOCK_SIZE*2] = '\0';
+
+    _DEBUG("%s -> sha256 %s\n", passwd->bv_val, hexdigest);
+
+	sha256_hexpasswd.bv_val = hexdigest;
+	sha256_hexpasswd.bv_len = sizeof(buf);
+
+	return sha256_hexpasswd;
+}
+
+static int hash_sha256bcrypt(
+    const struct berval  *scheme, /* Scheme name to construct output */
+    const struct berval  *passwd, /* Plaintext password to hash */
+    struct       berval  *hash,	  /* Return value: schema + bcrypt hash */
+    const char          **text)	  /* Unused */
+{
+    const struct berval sha256_hexpasswd = to_sha256(passwd);
+    const int return_val = hash_bcrypt(scheme, &sha256_hexpasswd, hash, text);
+    ber_memfree(sha256_hexpasswd.bv_val);
+    return return_val;
+}
+
+static int chk_sha256bcrypt(
+    const struct berval *scheme, /* Scheme of hashed reference password */
+    const struct berval *passwd, /* Hashed password to check against */
+    const struct berval *cred,   /* User-supplied password to check */
+    const char         **text)   /* Unused */
+{
+    const struct berval sha256_hexcred = to_sha256(cred);
+    const int return_val = chk_bcrypt(scheme, passwd, &sha256_hexcred, text);
+    ber_memfree(sha256_hexcred.bv_val);
+    return return_val;
+}
+
 int init_module(int argc, char *argv[])
 {
     _DEBUG("Loading bcrypt password module\n");
@@ -196,7 +250,10 @@ int init_module(int argc, char *argv[])
     }
 
     result = lutil_passwd_add( &bcryptscheme, chk_bcrypt, hash_bcrypt );
-    _DEBUG("pw-bcrypt: Initialized with work factor %d\n", bcrypt_workfactor);
+    _DEBUG("pw-bcrypt: Initialized BCRYPT with work factor %d\n", bcrypt_workfactor);
+
+    result = lutil_passwd_add( &sha256bcryptscheme, chk_sha256bcrypt, hash_sha256bcrypt );
+    _DEBUG("pw-bcrypt: Initialized SHA256-BCRYPT with work factor %d\n", bcrypt_workfactor);
 
     return result;
 }

@@ -1,3 +1,23 @@
+*WARNING: This plugin is in very early stages of development. It works for us, but might not be robust enough for your purposes. Please test it thoroughly before using it in production environments.*
+
+# clone this plugin to 389-ds-base/ldap/servers/plugins/389-directory-bcrypt
+
+# install requirements (for Ubuntu):
+# apt-get install -y libcrack2-dev libpam0g-dev libevent-dev libnspr4-dev libnss3-dev libldap2-dev libdb-dev libsasl2-dev libsnmp-dev libkrb5-dev libcmocka-dev
+
+# https://directory.fedoraproject.org/docs/389ds/contributing.html#building-the-project
+# cd 389-ds-base/
+# autoreconf -fiv
+# ./configure --enable-debug --with-openldap --enable-cmocka --enable-asan
+# make
+# make lib389
+# make check
+
+# plugin build:
+autoreconf -fiv
+./configure --with-ds=$(cd ../../../.. && pwd) --with-nspr-inc=/usr/include/nspr
+make
+
 bcrypt OpenLDAP support
 ----------------------
 pw-bcrypt.c provides support for bcrypt password hashes in OpenLDAP, as well as

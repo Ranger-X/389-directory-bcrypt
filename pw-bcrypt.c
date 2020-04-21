@@ -25,16 +25,29 @@
 #include <stdlib.h>
 
 #include "portable.h"
-#include <ac/string.h>
-#include "lber_pvt.h"
-#include "lutil.h"
+//#include <ac/string.h>
+#include "lber.h"
+#include "util.h"
+
+#ifdef HAVE_CONFIG_H
+#include <config.h>
+#endif
+
+#include <slapi-plugin.h>
+#include <slapi-private.h>
+#include <ssl.h>
+#include <nspr.h>
+#include <plbase64.h>
+#include <ldif.h>
 
 #include "crypt_blowfish.h"
 #include "crypt_sha256.h"
 
+static char *plugin_name = "PwdStorageBCryptPlugin";
+
 #ifdef SLAPD_BCRYPT_DEBUG
 #include <stdio.h>
-#define _DEBUG(args...) printf(args)
+#define _DEBUG(args...) slapi_log_err(SLAPI_LOG_DEBUG, plugin_name, args)
 #else
 #define _DEBUG(args...)
 #endif
@@ -50,18 +63,57 @@
  * accounts. Only used when no work factor is supplied in the slapd.conf
  * when loading the module. See README for more information.
  */
-#define BCRYPT_DEFAULT_WORKFACTOR        8
+#define BCRYPT_DEFAULT_WORKFACTOR        10
 #define BCRYPT_MIN_WORKFACTOR            4
 #define BCRYPT_MAX_WORKFACTOR           32
 
-#define BCRYPT_SALT_SIZE                16
+#define BCRYPT_SALT_SIZE                22
 #define BCRYPT_OUTPUT_SIZE              61
 
+/*
+ * Some defines from openLDAP
+ * */
+
+#define LUTIL_PASSWD_OK		(0)
+#define LUTIL_PASSWD_ERR	(-1)
+#define AC_MEMCPY( d, s, n ) (SAFEMEMCPY((d),(s),(n)))
+#define BER_STRLENOF(s)	(sizeof(s)-1)
+#define BER_BVC(s)		{ BER_STRLENOF(s), (char *)(s) }
+
 static int bcrypt_workfactor;
-struct berval bcryptscheme = BER_BVC("{BCRYPT}");
-struct berval sha256bcryptscheme = BER_BVC("{SHA256-BCRYPT}");
+const struct berval bcryptscheme = BER_BVC("{BCRYPT}");
+//struct berval sha256bcryptscheme = BER_BVC("{SHA256-BCRYPT}");
+static Slapi_PluginDesc bcrypt_pdesc = {"blowfish-crypt-password-storage-scheme", "RangerX", "0.0.1", "Salted Blowfish crypt hash algorithm (BCRYPT)"};
 
+/***
+ * Function instead of openLDAP's lutil_entropy
+ * @param dest
+ * @param length
+ * @return
+ */
+int rand_str(char *dest, size_t length) {
+    char charset[] = "0123456789"
+                     "abcdefghijklmnopqrstuvwxyz"
+                     "ABCDEFGHIJKLMNOPQRSTUVWXYZ";
 
+    while (length-- > 0) {
+        size_t index = (double) rand() / RAND_MAX * (sizeof charset - 1);
+        *dest++ = charset[index];
+    }
+    *dest = '\0';
+
+    return 0;
+}
+
+/**
+ * OpenLDAP version from https://github.com/sistason/openldap-sha256-bcrypt
+ *
+ * @param scheme
+ * @param passwd
+ * @param hash
+ * @param text
+ * @return
+ */
 static int hash_bcrypt(
     const struct berval  *scheme, /* Scheme name to construct output */
     const struct berval  *passwd, /* Plaintext password to hash */
@@ -81,7 +133,7 @@ static int hash_bcrypt(
     salt.bv_len = sizeof(saltinput);
 
     _DEBUG("Obtaining entropy for bcrypt: %d bytes\n", (int) salt.bv_len);
-    if (lutil_entropy((unsigned char *)salt.bv_val, salt.bv_len) < 0) {
+    if (rand_str((unsigned char *)salt.bv_val, salt.bv_len - 1) < 0) {
         _DEBUG("Error: cannot get entropy\n");
         return LUTIL_PASSWD_ERR;
     }
@@ -126,6 +178,9 @@ static int hash_bcrypt(
     return LUTIL_PASSWD_OK;
 }
 
+/**
+ * OpenLDAP version from https://github.com/sistason/openldap-sha256-bcrypt
+ */
 static int chk_bcrypt(
     const struct berval *scheme, /* Scheme of hashed reference password */
     const struct berval *passwd, /* Hashed password to check against */
@@ -161,7 +216,7 @@ static int chk_bcrypt(
     _DEBUG("Resulting hash: \"%s\"\n", computedhash);
 
     _DEBUG("Comparing newly created hash with supplied hash: ");
-    rc = memcmp((char *) passwd->bv_val, computedhash, BCRYPT_OUTPUT_SIZE);
+    rc = slapi_ct_memcmp((char *) passwd->bv_val, computedhash, BCRYPT_OUTPUT_SIZE);
     if (!rc) {
         _DEBUG("match\n");
         return LUTIL_PASSWD_OK;
@@ -222,38 +277,101 @@ static int chk_sha256bcrypt(
     return return_val;
 }
 
-int init_module(int argc, char *argv[])
+/**
+ *
+ * @param pwd
+ * @return
+ */
+char *
+bcrypt_pw_enc(const char *pwd)
 {
-    _DEBUG("Loading bcrypt password module\n");
+    char *enc = NULL;
+    long v;
+    static unsigned int seed = 0;
 
-    int result = 0;
+    const struct berval berval_pwd = {.bv_val = pwd, .bv_len = sizeof(*pwd) };
+    struct berval  hash;
 
-    /* Work factor can be provided in the moduleload statement in slapd.conf. */
-    if (argc > 0) {
-        _DEBUG("Work factor argument provided, trying to use that\n");
-        int work = atoi(argv[0]);
-        if (work &&
-            work >= BCRYPT_MIN_WORKFACTOR &&
-            work <= BCRYPT_MAX_WORKFACTOR) {
-            _DEBUG("Using configuration-supplied work factor %d\n", work);
-            bcrypt_workfactor = work;
-
-        } else {
-            _DEBUG("Invalid work factor. Using default work factor %d\n",
-                   BCRYPT_DEFAULT_WORKFACTOR);
-            bcrypt_workfactor = BCRYPT_DEFAULT_WORKFACTOR;
-        }
-    } else {
-        _DEBUG("No arguments provided. Using default work factor %d\n",
-               BCRYPT_DEFAULT_WORKFACTOR);
-        bcrypt_workfactor = BCRYPT_DEFAULT_WORKFACTOR;
+    if (seed == 0) {
+        seed = (unsigned int)slapi_rand();
     }
+    v = slapi_rand_r(&seed);
 
-    result = lutil_passwd_add( &bcryptscheme, chk_bcrypt, hash_bcrypt );
-    _DEBUG("pw-bcrypt: Initialized BCRYPT with work factor %d\n", bcrypt_workfactor);
+//    berval_pwd.bv_val = pwd;
+//    berval_pwd.bv_len = sizeof(pwd);
 
-    result = lutil_passwd_add( &sha256bcryptscheme, chk_sha256bcrypt, hash_sha256bcrypt );
-    _DEBUG("pw-bcrypt: Initialized SHA256-BCRYPT with work factor %d\n", bcrypt_workfactor);
+    const int return_val = hash_bcrypt(&bcryptscheme, &berval_pwd, &hash, (const char **)"");
 
-    return result;
+    if (return_val == LUTIL_PASSWD_OK) {
+        return (hash.bv_val);
+    }
 }
+
+int bcrypt_pw_cmp(const char *userpwd, const char *dbpwd) {
+
+    const struct berval berval_userpwd = {.bv_val = userpwd, .bv_len = sizeof(*userpwd) };
+    const struct berval berval_dbpwd = {.bv_val = dbpwd, .bv_len = sizeof(*dbpwd) };
+
+    return chk_bcrypt(&bcryptscheme, &berval_dbpwd, &berval_userpwd, (const char **)"");
+}
+
+int
+bcrypt_pwd_storage_scheme_init(Slapi_PBlock *pb)
+{
+    int rc;
+
+    slapi_log_err(SLAPI_LOG_PLUGIN, plugin_name, "=> bcrypt_pwd_storage_scheme_init\n");
+
+    rc = slapi_pblock_set(pb, SLAPI_PLUGIN_VERSION,
+                          (void *)SLAPI_PLUGIN_VERSION_01);
+    rc |= slapi_pblock_set(pb, SLAPI_PLUGIN_DESCRIPTION,
+                           (void *)&bcrypt_pdesc);
+    rc |= slapi_pblock_set(pb, SLAPI_PLUGIN_PWD_STORAGE_SCHEME_ENC_FN,
+                           (void *)bcrypt_pw_enc);
+    rc |= slapi_pblock_set(pb, SLAPI_PLUGIN_PWD_STORAGE_SCHEME_CMP_FN,
+                           (void *)bcrypt_pw_cmp);
+    rc |= slapi_pblock_set(pb, SLAPI_PLUGIN_PWD_STORAGE_SCHEME_NAME,
+                           "BCRYPT");
+
+    bcrypt_workfactor = BCRYPT_DEFAULT_WORKFACTOR;
+
+    slapi_log_err(SLAPI_LOG_PLUGIN, plugin_name, "<= bcrypt_pwd_storage_scheme_init %d\n\n", rc);
+
+    return (rc);
+}
+
+//int init_module(int argc, char *argv[])
+//{
+//    _DEBUG("Loading bcrypt password module\n");
+//
+//    int result = 0;
+//
+//    /* Work factor can be provided in the moduleload statement in slapd.conf. */
+//    if (argc > 0) {
+//        _DEBUG("Work factor argument provided, trying to use that\n");
+//        int work = atoi(argv[0]);
+//        if (work &&
+//            work >= BCRYPT_MIN_WORKFACTOR &&
+//            work <= BCRYPT_MAX_WORKFACTOR) {
+//            _DEBUG("Using configuration-supplied work factor %d\n", work);
+//            bcrypt_workfactor = work;
+//
+//        } else {
+//            _DEBUG("Invalid work factor. Using default work factor %d\n",
+//                   BCRYPT_DEFAULT_WORKFACTOR);
+//            bcrypt_workfactor = BCRYPT_DEFAULT_WORKFACTOR;
+//        }
+//    } else {
+//        _DEBUG("No arguments provided. Using default work factor %d\n",
+//               BCRYPT_DEFAULT_WORKFACTOR);
+//        bcrypt_workfactor = BCRYPT_DEFAULT_WORKFACTOR;
+//    }
+//
+//    result = lutil_passwd_add( &bcryptscheme, chk_bcrypt, hash_bcrypt );
+//    _DEBUG("pw-bcrypt: Initialized BCRYPT with work factor %d\n", bcrypt_workfactor);
+//
+//    result = lutil_passwd_add( &sha256bcryptscheme, chk_sha256bcrypt, hash_sha256bcrypt );
+//    _DEBUG("pw-bcrypt: Initialized SHA256-BCRYPT with work factor %d\n", bcrypt_workfactor);
+//
+//    return result;
+//}

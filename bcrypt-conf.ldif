@@ -1,0 +1,8 @@
+dn: cn=BCRYPT,cn=Password Storage Schemes,cn=plugins,cn=config
+objectclass: top
+objectclass: nsSlapdPlugin
+cn: BCRYPT
+nsslapd-pluginpath: libpwdstorage-bcrypt-plugin
+nsslapd-plugininitfunc: bcrypt_pwd_storage_scheme_init
+nsslapd-plugintype: pwdstoragescheme
+nsslapd-pluginenabled: on

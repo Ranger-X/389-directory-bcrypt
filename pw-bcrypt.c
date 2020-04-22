@@ -24,10 +24,10 @@
 
 #include <stdlib.h>
 
-#include "portable.h"
+//#include "portable.h"
 //#include <ac/string.h>
 #include "lber.h"
-#include "util.h"
+//#include "util.h"
 
 #ifdef HAVE_CONFIG_H
 #include <config.h>

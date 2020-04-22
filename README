@@ -18,6 +18,41 @@ autoreconf -fiv
 ./configure --with-ds=$(cd ../../../.. && pwd) --with-nspr-inc=/usr/include/nspr
 make
 
+Build the plug-in as a library.
+
+   We recommend to use the Directory Server's build scheme.
+   3.1 Add your plugin to Makefile.am
+   Index: Makefile.am
+   ===================================================================
+   RCS file: /cvs/dirsec/ldapserver/Makefile.am,v
+   retrieving revision 1.14
+   diff -t -w -U2 -r1.14 Makefile.am
+   --- Makefile.am 16 Nov 2006 18:56:03 -0000      1.14
+   +++ Makefile.am 14 Dec 2006 23:51:30 -0000
+   @@ -74,5 +74,5 @@
+
+    serverplugin_LTLIBRARIES = libacl-plugin.la libattr-unique-plugin.la libchainingdb-plugin.la \
+            libpassthru-plugin.la libpresence-plugin.la libpwdstorage-plugin.la \
+            libpwdstorage-bcrypt-plugin.la
+   @@ -540,4 +540,11 @@
+
+#------------------------
+# libpwdstorage-bcrypt-plugin
+#------------------------
+libpwdstorage_bcrypt_plugin_la_SOURCES = ldap/servers/plugins/389-directory-bcrypt/crypt_blowfish.c \
+										 ldap/servers/plugins/389-directory-bcrypt/pw-bcrypt.c
+
+libpwdstorage_bcrypt_plugin_la_CPPFLAGS = $(DSPLUGIN_CPPFLAGS)
+
+
+   3.2 run autotool commands/configure
+   $ autoreconf -fiv
+   $ ./configure --enable-debug --with-openldap --enable-cmocka --enable-asan
+   $ make
+   After successful compiling, plugin library will available in [DS root]/.libs/<plugin-name>.so*
+
+   I made my own fork of 389 DS with this plugin: https://pagure.io/fork/rangerx/389-ds-base
+
 bcrypt OpenLDAP support
 ----------------------
 pw-bcrypt.c provides support for bcrypt password hashes in OpenLDAP, as well as

@@ -2,7 +2,11 @@ dn: cn=BCRYPT,cn=Password Storage Schemes,cn=plugins,cn=config
 objectclass: top
 objectclass: nsSlapdPlugin
 cn: BCRYPT
+nsslapd-pluginId: libpwdstorage-bcrypt-plugin
 nsslapd-pluginpath: libpwdstorage-bcrypt-plugin
 nsslapd-plugininitfunc: bcrypt_pwd_storage_scheme_init
 nsslapd-plugintype: pwdstoragescheme
+nsslapd-pluginDescription: Blowfish-hashed password storage (BCRYPT)
+nsslapd-pluginVendor: RangerX (https://github.com/Ranger-X/389-directory-bcrypt)
+nsslapd-pluginVersion: 0.0.1
 nsslapd-pluginenabled: on

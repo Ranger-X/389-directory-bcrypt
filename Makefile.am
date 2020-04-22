@@ -13,10 +13,10 @@ LIBNAME = libpwdstorage-bcrypt-plugin.so
 CONFFILE = bcrypt-conf.ldif
 # $(PASSWDQC_INCLUDES)
 if DEBUG
-AM_CFLAGS = $(PICFLAG) -O0 -g3 -m64 -c \
+AM_CFLAGS = $(PICFLAG) -O0 -g3 -m64 -c -std=c99 \
     $(DS_INCLUDES) $(NSPR_INCLUDES) -D SLAPD_BCRYPT_DEBUG
 else
-AM_CFLAGS = $(PICFLAG) -O2 -m64 -c \
+AM_CFLAGS = $(PICFLAG) -O2 -m64 -c -std=c99 \
     $(DS_INCLUDES) $(NSPR_INCLUDES)
 endif
 

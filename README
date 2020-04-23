@@ -1,64 +1,10 @@
 *WARNING: This plugin is in very early stages of development. It works for us, but might not be robust enough for your purposes. Please test it thoroughly before using it in production environments.*
 
-# clone this plugin to 389-ds-base/ldap/servers/plugins/389-directory-bcrypt
-
-# install requirements (for Ubuntu):
-# apt-get install -y libcrack2-dev libpam0g-dev libevent-dev libnspr4-dev libnss3-dev libldap2-dev libdb-dev libsasl2-dev libsnmp-dev libkrb5-dev libcmocka-dev
-
-# https://directory.fedoraproject.org/docs/389ds/contributing.html#building-the-project
-# cd 389-ds-base/
-# autoreconf -fiv
-# ./configure --enable-debug --with-openldap --enable-cmocka --enable-asan
-# make
-# make lib389
-# make check
-
-# plugin build:
-autoreconf -fiv
-./configure --with-ds=$(cd ../../../.. && pwd) --with-nspr-inc=/usr/include/nspr
-make
-
-Build the plug-in as a library.
-
-   We recommend to use the Directory Server's build scheme.
-   3.1 Add your plugin to Makefile.am
-   Index: Makefile.am
-   ===================================================================
-   RCS file: /cvs/dirsec/ldapserver/Makefile.am,v
-   retrieving revision 1.14
-   diff -t -w -U2 -r1.14 Makefile.am
-   --- Makefile.am 16 Nov 2006 18:56:03 -0000      1.14
-   +++ Makefile.am 14 Dec 2006 23:51:30 -0000
-   @@ -74,5 +74,5 @@
-
-    serverplugin_LTLIBRARIES = libacl-plugin.la libattr-unique-plugin.la libchainingdb-plugin.la \
-            libpassthru-plugin.la libpresence-plugin.la libpwdstorage-plugin.la \
-            libpwdstorage-bcrypt-plugin.la
-   @@ -540,4 +540,11 @@
-
-#------------------------
-# libpwdstorage-bcrypt-plugin
-#------------------------
-libpwdstorage_bcrypt_plugin_la_SOURCES = ldap/servers/plugins/389-directory-bcrypt/crypt_blowfish.c \
-										 ldap/servers/plugins/389-directory-bcrypt/pw-bcrypt.c
-
-libpwdstorage_bcrypt_plugin_la_CPPFLAGS = $(DSPLUGIN_CPPFLAGS)
-
-
-   3.2 run autotool commands/configure
-   $ autoreconf -fiv
-   $ ./configure --enable-debug --with-openldap --enable-cmocka --enable-asan
-   $ make
-   After successful compiling, plugin library will available in [DS root]/.libs/<plugin-name>.so*
-
-   I made my own fork of 389 DS with this plugin: https://pagure.io/fork/rangerx/389-ds-base
-
-bcrypt OpenLDAP support
+bcrypt 389 DS support
 ----------------------
-pw-bcrypt.c provides support for bcrypt password hashes in OpenLDAP, as well as
-bcrypt password hashes also hashed before with SHA256 (as does Rocket.Chat in 2020).
+pw-bcrypt.c provides support for bcrypt password hashes in 389 Directory server.
 
-The original repository for this is [wclarie/openldap-bcrypt], I just added the sha256 part.
+The original repository (for OpenLDAP) is [sistason/openldap-sha256-bcrypt], I just rewrite it as 389 DS plugin.
 
 About bcrypt
 ------------
@@ -91,91 +37,54 @@ from work factor 8 to 9 means the hash takes twice as much time to generate
 
 Building
 --------
-1) Build and install OpenLDAP itself from the root of the distribution or
-from a git checkout
+I do not test this plugin to work with 389DS from RPMs package, only from custom source build.
 
-$ ./configure --prefix=/usr/local --enable-modules [other options you want]
-$ make depend
-$ make
-$ sudo make install
+I forked (https://pagure.io/forks/rangerx/389-ds-base) 389 DS original repo (https://pagure.io/389-ds-base) and integrate this plugin to some branches (master and 389-ds-base-1.3.9).
 
-2) Incorporate the pw-bcrypt module in the source directory
+1) So, you could try to build your own 389 DS with Bcrypt support like this:
 
-$ cd contrib/slapd-modules/passwd
-$ git clone <this repo> bcrypt
-$ cd bcrypt
+# clone fork
+$ git clone -b 389-ds-base-1.3.9 --recurse-submodules --single-branch -- https://pagure.io/forks/rangerx/389-ds-base.git 389-ds-base
+$ cd 389-ds-base/
 
-3) Optional: Customize your setup
+# install some dependencies in CentOS 7
+$ sudo yum install -y make epel-release @buildsys-build python3-argparse-manpage python3-argcomplete python3-ldap rpm-build redhat-rpm-config python3-devel cracklib-devel
+$ sudo yum install -y --skip-broken `grep -E "^(Build)?Requires" ./rpm/389-ds-base.spec.in | grep -v -E '(name|MODULE)' | awk '{ print $2 }' | grep -v "^/" | grep -v pkgversion | sort | uniq|  tr '\n' ' '`
 
-Prefix
-The default prefix is /usr/local which means the module will be installed in
-/usr/local/libexec/openldap. If you want to change that, edit the 'prefix'
-variable in the Makefile. It is probably best to set this to whatever you set
-the --prefix to in step 1.
+# or Ubuntu/Debian (not tested)
+$ sudo apt-get install -y libcrack2-dev libpam0g-dev libevent-dev libnspr4-dev libnss3-dev libldap2-dev libdb-dev libsasl2-dev libsnmp-dev libkrb5-dev libcmocka-dev
 
-Work factor
-The default work factor used by OpenBSD for regular user passwords is 8. It is
-also the default used by this module. The work factor can be set in slapd.conf
-but you can also change the default work factor in the code by editing
-pw-bcrypt.c: just set BCRYPT_DEFAULT_WORKFACTOR to the value you want.
+# now configure and build
+$ autoreconf -fiv
+$ ./configure --enable-debug --with-openldap [other options you want]
+$ make && make lib389 && make check && make install
 
-The work factor must be between 4 (very fast, not very safe) and 31 (insane,
-completely unusable; this will basically lock up the server).
+2) Run 389 DS. Something like:
+/usr/sbin/ns-slapd -D /etc/dirsrv/slapd-dir
 
-No matter what the work factor is set to in the code or in the configuration
-file, you will always be able to validate existing passwords that were hashed
-with different work factors.
+3) Enable bcrypt plugin:
+ldapadd -x -D 'cn=Directory Manager' -f ldap/servers/plugins/389-directory-bcrypt/bcrypt-conf.ldif -W
 
-4) Build the pw-bcrypt module:
-
-$ make
-$ sudo make install
-
-This will install the module to {prefix}/libexec/openldap/
-
-5) Edit your slapd.conf, and add:
-
-moduleload /usr/local/libexec/openldap/pw-bcrypt.so WORKFACTOR
-(or wherever you ended up putting your module)
-
-The WORKFACTOR argument can be omitted, in which case slapd will use the default
-of 8 or whatever you set it to in step 3.
-
-If you want all your new hashes to use bcrypt (in Password Modify Extended
-Operations), set this in your slapd.conf:
-
-password-hash   {BCRYPT}
-(or use password-hash {SHA256-BCRYPT})
-
-When using cn=config, the option becomes `olcPasswordHash: {BCRYPT}`. You need
-to set this in the **olcDatabase={-1}frontend,cn=config**, as cn=config
-parameters are evaluated before dynamic module loading!
-
-
-However, make sure that all LDAP servers in your environment have the module
+Make sure that all LDAP servers in your environment have the module
 loaded before you do this, otherwise your users will not be able to authenticate.
-
-6) Restart slapd.
 
 Testing
 -------
-Use slappasswd to generate some hashes.
 
-$ slappasswd -h '{BCRYPT}' -o module-load="<path-to-the-module>/pw-bcrypt.so" -s randompassword
+Use pwdhash to generate some hashes.
 
-(Yes, the keyword here is 'module-load' with a - (dash). In slapd.conf the
-keyword is 'moduleload' without the dash.)
+$ pwdhash -D /opt/dirsrv/etc/dirsrv/slapd-dir -s BCRYPT 12345
+{BCRYPT}$2b$10$aSftQ1DXbBHwPCHObVLHOeOqdstI2Q5IjR.crFb8Srx4epuIRTIuK
 
-Unfortunately, slappasswd does not allow providing any arguments to the module,
-so all hashes created with slappasswd will have the default work factor, which
-is 8 (or whatever you set it to in pw-bcrypt.c if you edited that).
+Or compare passwords:
+$ pwdhash -D /opt/dirsrv/etc/dirsrv/slapd-dir -c '{BCRYPT}$2a$10$/EvaHg4kmzMn2tTk5Ao48.4FLeZqiRMvKXB8V8GyNzKaLksUnDAf.' 12345
+pwdhash: password ok.
 
 Debugging
 ---------
-To see what's going on, recompile with SLAPD_BCRYPT_DEBUG (use the commented-out
-DEFS in the Makefile), and then run slapd from the console:
+To see what's going on, recompile with SLAPD_BCRYPT_DEBUG, and then run slapd from the console:
 
-/usr/local/libexec/slapd -d
+ns-slapd -D /etc/dirsrv/slapd-dir -d 65536
 
 WARNING: With debugging enabled, all passwords will be logged in plaintext!
 

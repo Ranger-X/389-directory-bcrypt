@@ -1,0 +1,16 @@
+dn: cn=test-user,dc=example,dc=org
+cn: test-user
+description: bcrypt test
+gidnumber: 15000
+homedirectory: /home/test-user
+loginshell: /bin/bash
+objectclass: posixAccount
+objectclass: inetOrgPerson
+objectclass: organizationalPerson
+objectclass: person
+objectclass: top
+sn: test-user
+uid: test-user
+uidnumber: 15002
+# hashed 12345
+userpassword: {BCRYPT}$2a$10$/EvaHg4kmzMn2tTk5Ao48.4FLeZqiRMvKXB8V8GyNzKaLksUnDAf.

@@ -29,10 +29,6 @@
 #include "lber.h"
 //#include "util.h"
 
-#ifdef HAVE_CONFIG_H
-#include <config.h>
-#endif
-
 #include <slapi-plugin.h>
 #include <slapi-private.h>
 #include <ssl.h>
@@ -41,7 +37,7 @@
 #include <ldif.h>
 
 #include "crypt_blowfish.h"
-#include "crypt_sha256.h"
+//#include "crypt_sha256.h"
 
 static char *plugin_name = "PwdStorageBCryptPlugin";
 
@@ -225,7 +221,7 @@ static int chk_bcrypt(
     _DEBUG("no match\n");
     return LUTIL_PASSWD_ERR;
 }
-
+/*
 static const struct berval to_sha256(const struct berval *passwd)
 {
     _DEBUG("Entering to_sha256\n");
@@ -254,10 +250,10 @@ static const struct berval to_sha256(const struct berval *passwd)
 }
 
 static int hash_sha256bcrypt(
-    const struct berval  *scheme, /* Scheme name to construct output */
-    const struct berval  *passwd, /* Plaintext password to hash */
-    struct       berval  *hash,	  /* Return value: schema + bcrypt hash */
-    const char          **text)	  /* Unused */
+    const struct berval  *scheme,
+    const struct berval  *passwd,
+    struct       berval  *hash,
+    const char          **text)
 {
     const struct berval sha256_hexpasswd = to_sha256(passwd);
     const int return_val = hash_bcrypt(scheme, &sha256_hexpasswd, hash, text);
@@ -266,17 +262,17 @@ static int hash_sha256bcrypt(
 }
 
 static int chk_sha256bcrypt(
-    const struct berval *scheme, /* Scheme of hashed reference password */
-    const struct berval *passwd, /* Hashed password to check against */
-    const struct berval *cred,   /* User-supplied password to check */
-    const char         **text)   /* Unused */
+    const struct berval *scheme,
+    const struct berval *passwd,
+    const struct berval *cred,
+    const char         **text)
 {
     const struct berval sha256_hexcred = to_sha256(cred);
     const int return_val = chk_bcrypt(scheme, passwd, &sha256_hexcred, text);
     ber_memfree(sha256_hexcred.bv_val);
     return return_val;
 }
-
+*/
 /**
  *
  * @param pwd
@@ -295,7 +291,7 @@ bcrypt_pw_enc(const char *pwd)
     if (seed == 0) {
         seed = (unsigned int)slapi_rand();
     }
-    v = slapi_rand_r(&seed);
+    //v = slapi_rand_r(&seed);
 
 //    berval_pwd.bv_val = pwd;
 //    berval_pwd.bv_len = sizeof(pwd);

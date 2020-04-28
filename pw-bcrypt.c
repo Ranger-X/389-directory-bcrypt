@@ -42,8 +42,7 @@
 static char *plugin_name = "PwdStorageBCryptPlugin";
 
 #ifdef SLAPD_BCRYPT_DEBUG
-#include <stdio.h>
-#define _DEBUG(args...) slapi_log_err(SLAPI_LOG_DEBUG, plugin_name, args)
+#define _DEBUG(args...) slapi_log_err(SLAPI_LOG_PLUGIN, plugin_name, __VA_ARGS__)
 #else
 #define _DEBUG(args...)
 #endif

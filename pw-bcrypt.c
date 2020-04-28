@@ -29,6 +29,10 @@
 #include "lber.h"
 //#include "util.h"
 
+#ifdef HAVE_CONFIG_H
+#include <config.h>
+#endif
+
 #include <slapi-plugin.h>
 #include <slapi-private.h>
 #include <ssl.h>
@@ -42,9 +46,9 @@
 static char *plugin_name = "PwdStorageBCryptPlugin";
 
 #ifdef SLAPD_BCRYPT_DEBUG
-#define _DEBUG(args...) slapi_log_err(SLAPI_LOG_PLUGIN, plugin_name, __VA_ARGS__)
+#define _DEBUG(...) slapi_log_err(SLAPI_LOG_PLUGIN, plugin_name, __VA_ARGS__)
 #else
-#define _DEBUG(args...)
+#define _DEBUG(...)
 #endif
 
 /* Always generate 'b' type hashes for new passwords to match
